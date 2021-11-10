@@ -10,7 +10,7 @@ public class Shooting : MonoBehaviour
     Camera fpsCamera;
 
 
-    public float fireRate = 0.1f;
+    public float fireRate = 2f;
     float fireTimer;
 
 
@@ -19,7 +19,7 @@ public class Shooting : MonoBehaviour
         
     }
 
-    
+
     void Update()
     {
         if (fireTimer < fireRate)
@@ -27,11 +27,19 @@ public class Shooting : MonoBehaviour
             fireTimer += Time.deltaTime;
         }
 
+        if (Input.GetButton("Fire2") && fireTimer < fireRate)
+        {
+            GetComponent<Animator>().SetBool("isAtacking", false);
+        }
+        
 
-
-        if (Input.GetButton("Fire1") && fireTimer > fireRate)
+        if (Input.GetButton("Fire2") && fireTimer > fireRate)
         {
             fireTimer = 0.0f;
+            GetComponent<Animator>().SetBool("isWalking", false);            
+            GetComponent<Animator>().SetBool("isAtacking", true);
+            
+            //GetComponent<Animator>().SetBool("isAtacking", true);
 
             RaycastHit _hit;
             Ray ray = fpsCamera.ViewportPointToRay(new Vector3(0.5f, 0.5f));
@@ -41,7 +49,7 @@ public class Shooting : MonoBehaviour
 
                 if (_hit.collider.gameObject.CompareTag("Player") && !_hit.collider.gameObject.GetComponent<PhotonView>().IsMine)
                 {
-                    _hit.collider.gameObject.GetComponent<PhotonView>().RPC("TakeDamage", RpcTarget.AllBuffered, 10f);
+                    _hit.collider.gameObject.GetComponent<PhotonView>().RPC("TakeDamage", RpcTarget.AllBuffered, 0f);
                 }
             }
         }

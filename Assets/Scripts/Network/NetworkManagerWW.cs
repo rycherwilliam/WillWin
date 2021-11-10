@@ -34,6 +34,7 @@ public class NetworkManagerWW : MonoBehaviourPunCallbacks
 
     [Header("Inside Room UI Panel")]
     public GameObject insideRoomPanel;
+    public GameObject insideRoomPanelStartButton;
     public TextMeshProUGUI insideRoomPanelText;
     public GameObject playerListPrefab;
     public GameObject playerListContent;
@@ -43,9 +44,7 @@ public class NetworkManagerWW : MonoBehaviourPunCallbacks
 
     [Header("Game Options UI Panel")]
 
-
     public Dictionary<int, GameObject> playerListGameObjects;
-
     private Dictionary<string, GameObject> roomListGameObjects;
     private Dictionary<string, RoomInfo> cachedRoomList;
     private Photon.Realtime.Player[] pList;
@@ -65,11 +64,11 @@ public class NetworkManagerWW : MonoBehaviourPunCallbacks
         cachedRoomList = new Dictionary<string, RoomInfo>();
         roomListGameObjects = new Dictionary<string, GameObject>();
 
-        pList = PhotonNetwork.PlayerList;
-        foreach (Photon.Realtime.Player player in pList)
-        {
-            Debug.Log(player.NickName);
-        }
+        //pList = PhotonNetwork.PlayerList;
+        //foreach (Photon.Realtime.Player player in pList)
+        //{
+        //    Debug.Log(player.NickName);
+        //}
     }
 
     private void Update()
@@ -107,6 +106,11 @@ public class NetworkManagerWW : MonoBehaviourPunCallbacks
     {
         PhotonNetwork.JoinLobby();
         ActivatePanel(joinCreateRoomPanel.name);     
+    }
+
+    public void OnStartGameBUttonClicked()
+    {
+        PhotonNetwork.LoadLevel("Map_v1");        
     }
 
     public void OnExitBUttonClicked()
@@ -166,10 +170,8 @@ public class NetworkManagerWW : MonoBehaviourPunCallbacks
     }
 
     public override void OnConnectedToMaster()
-    {
-        //SetActive true to JoinCreateRoomPanel after Connected to the Master Server     
-        ActivatePanel(menuPanel.name);
-        //PhotonNetwork.JoinLobby();
+    {        
+        ActivatePanel(menuPanel.name);        
         Debug.Log(PhotonNetwork.LocalPlayer.NickName + "is connected to Photon");
     }
 
@@ -182,19 +184,29 @@ public class NetworkManagerWW : MonoBehaviourPunCallbacks
     {
         ActivatePanel(insideRoomPanel.name);
         insideRoomPanelText.text = PhotonNetwork.CurrentRoom.Name + " " + PhotonNetwork.CurrentRoom.PlayerCount + "/" + PhotonNetwork.CurrentRoom.MaxPlayers;
-        //PhotonNetwork.LoadLevel("Map_v1");
 
-        //
+        if (PhotonNetwork.LocalPlayer.IsMasterClient)
+        {
+            insideRoomPanelStartButton.SetActive(true);
+        }
+        else
+        {
+            insideRoomPanelStartButton.SetActive(false);
+        }
+
+
         if (playerListGameObjects == null)
+        {
             playerListGameObjects = new Dictionary<int, GameObject>();
+        }
+            
 
 
         foreach (Player player in PhotonNetwork.PlayerList)
         {
             GameObject playerListGameObject = Instantiate(playerListPrefab);
-            playerListGameObject.transform.SetParent(playerListContent.transform);
-            playerListGameObject.transform.localScale = Vector3.one;
-            //playerListGameObject.GetComponent<PlayerListEntryInitializer>().Initialize(player.ActorNumber, player.NickName);
+            playerListGameObject.transform.SetParent(playerListContent.transform, false);
+            playerListGameObject.transform.localScale = Vector3.one;            
 
             playerListGameObject.transform.Find("PlayerNameText").GetComponent<Text>().text = player.NickName;
 
@@ -205,8 +217,9 @@ public class NetworkManagerWW : MonoBehaviourPunCallbacks
             else
             {
                 playerListGameObject.transform.Find("PlayerIndicator").gameObject.SetActive(false);
-            }
+            }            
 
+            playerListGameObjects.Add(player.ActorNumber, playerListGameObject);            
         }
 
     }
@@ -220,6 +233,14 @@ public class NetworkManagerWW : MonoBehaviourPunCallbacks
     public override void OnLeftRoom()
     {
         Debug.Log(PhotonNetwork.LocalPlayer.NickName + " left the room: ");
+        
+        foreach(GameObject playerListGameObject in playerListGameObjects.Values)
+        {
+            Destroy(playerListGameObject);
+        }
+
+        playerListGameObjects.Clear();
+        playerListGameObjects = null;
     }
 
     public override void OnRoomListUpdate(List<RoomInfo> roomList)
@@ -266,12 +287,34 @@ public class NetworkManagerWW : MonoBehaviourPunCallbacks
 
     public override void OnPlayerEnteredRoom(Player newPlayer)
     {
+        GameObject playerListGameObject = Instantiate(playerListPrefab);        
+        playerListGameObject.transform.SetParent(playerListContent.transform, false);        
+        playerListGameObject.transform.localScale = Vector3.one;        
+        playerListGameObject.transform.Find("PlayerNameText").GetComponent<Text>().text = newPlayer.NickName;
+
+        if (newPlayer.ActorNumber == PhotonNetwork.LocalPlayer.ActorNumber)
+        {
+            playerListGameObject.transform.Find("PlayerIndicator").gameObject.SetActive(true);
+        }
+        else
+        {
+            playerListGameObject.transform.Find("PlayerIndicator").gameObject.SetActive(false);
+        }        
+
+        playerListGameObjects.Add(newPlayer.ActorNumber, playerListGameObject);        
         insideRoomPanelText.text = PhotonNetwork.CurrentRoom.Name + " " + PhotonNetwork.CurrentRoom.PlayerCount + "/" + PhotonNetwork.CurrentRoom.MaxPlayers;
     }
 
     public override void OnPlayerLeftRoom(Player otherPlayer)
     {
         insideRoomPanelText.text = PhotonNetwork.CurrentRoom.Name + " " + PhotonNetwork.CurrentRoom.PlayerCount + "/" + PhotonNetwork.CurrentRoom.MaxPlayers;
+        Destroy(playerListGameObjects[otherPlayer.ActorNumber].gameObject);
+        playerListGameObjects.Remove(otherPlayer.ActorNumber);
+
+        if (PhotonNetwork.LocalPlayer.IsMasterClient)
+        {
+            insideRoomPanelStartButton.SetActive(true);
+        }
     }
     
     #endregion

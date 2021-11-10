@@ -2,34 +2,46 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using Photon.Pun;
+
 public class MovementController : MonoBehaviour
 {
 
     [SerializeField]
-    private float speed = 3f;
+    private float maximumSpeed = 3f;
 
     [SerializeField]
     private float lookSensitivity = 3f;
+    [SerializeField]
+    private float rotationSpeed = 0f;
 
     [SerializeField]
-    public GameObject fpsCamera;
-   
+    private Transform cameraTransform;
+    [SerializeField]
+    private float jumpSpeed = 0f;
+
+
     private Vector3 rotation = Vector3.zero;  
-    private float cameraUpDownRotation = 0f;
-    private float currentCameraUpDownRotation = 0f;   
-
-    private Rigidbody rb;
-
-
+    private CharacterController characterController;
+    private Vector3 movementDirection = Vector3.zero;
+    [SerializeField]
+    private float jumpButtonGracePeriod = 0f;
     //player movement/rotation values
     private float _xMovement = 0f;
     private float _zMovement = 0f;
     private float _yRotation = 0f;
+    private float inputMagnitude = 0f;
+    private float ySpeed = 0f;
+    private float originalStepOffset = 0f;
+    private float? lastGroundedTime = 0f;
+    private float? jumpButtonPressedTime = 0f;
+    
 
     private void Start()
-    {
+    {        
         Cursor.lockState = CursorLockMode.Locked;
-        rb = GetComponent<Rigidbody>();
+        characterController = GetComponent<CharacterController>();
+        originalStepOffset = characterController.stepOffset;
+        //rotationSpeed = 720f;
     }
 
     //runs per fps
@@ -37,45 +49,100 @@ public class MovementController : MonoBehaviour
     {
         //Calculate movement veloc, ty as a 3d vector
         _xMovement = Input.GetAxis("Horizontal");
-        _zMovement = Input.GetAxis("Vertical");
+        _zMovement = Input.GetAxis("Vertical");        
 
-        //calculate rotation as an ID Vector for turning around
-        _yRotation = Input.GetAxis("Mouse X");
-       
-        //Calculate look up and down camera rotation
-        cameraUpDownRotation = Input.GetAxis("Mouse Y") * lookSensitivity;       
+        movementDirection = new Vector3(_xMovement,0,_zMovement);
+
+
+        if (movementDirection != Vector3.zero)
+        {
+            GetComponent<Animator>().SetBool("isWalking", true);
+            GetComponent<Animator>().SetBool("isAtacking", false);
+            if (Input.GetButtonDown("Jump"))
+            {
+                GetComponent<Animator>().SetBool("isJumping", true);
+            }
+            else
+            {
+                GetComponent<Animator>().SetBool("isJumping", false);
+            }
+        }
+        else
+        {
+            GetComponent<Animator>().SetBool("isWalking", false);
+            GetComponent<Animator>().SetBool("isJumping", false);
+        }
+
+        if(Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift))
+        {
+            inputMagnitude /= 2;
+        }
+
+        if (Input.GetButtonDown("Jump"))
+        {
+            GetComponent<Animator>().SetBool("isJumping", true);
+            GetComponent<Animator>().SetBool("isAtacking", false);
+            GetComponent<Animator>().SetBool("isWalking", false);
+            jumpButtonPressedTime = Time.time;
+        }        
     }
 
     //runs per physics iteration
     private void FixedUpdate()
-    {
-        PlayerMovement();       
+    {       
+        if (transform.GetComponent<PhotonView>().IsMine)
+        {
+            PlayerMovement();
+        }
+        
     }
 
 
     private void PlayerMovement()
     {
-        Vector3 _movementHorizontal = transform.right * _xMovement;
-        Vector3 _movementVertical = transform.forward * _zMovement;
+        
+        inputMagnitude = Mathf.Clamp01(movementDirection.magnitude);
 
-        //final movement velocity vector        
-        Vector3 _movementVelocity = (_movementHorizontal + _movementVertical) * speed;
+        float speed = inputMagnitude * maximumSpeed;
+        movementDirection = Quaternion.AngleAxis(cameraTransform.rotation.eulerAngles.y, Vector3.up) * movementDirection;
+        movementDirection.Normalize();
+        
+        
+        ySpeed += Physics.gravity.y * Time.deltaTime;
 
-        rotation = new Vector3(0, _yRotation, 0);
-
-        rb.MovePosition(rb.position + _movementVelocity * Time.deltaTime);        
-        rb.MoveRotation(rb.rotation * Quaternion.Euler(rotation));
-
-        if (fpsCamera != null)
+        if (characterController.isGrounded)
         {
-            currentCameraUpDownRotation -= cameraUpDownRotation;
-            currentCameraUpDownRotation = Mathf.Clamp(currentCameraUpDownRotation, -85, 85);
-            fpsCamera.transform.localEulerAngles = new Vector3(currentCameraUpDownRotation, 0, 0);
+            lastGroundedTime = Time.time;
+        }
+
+        if (Time.time - lastGroundedTime <= jumpButtonGracePeriod)
+        {
+            characterController.stepOffset = originalStepOffset;
+            ySpeed = -0.5f;
+
+            if (Time.time - jumpButtonPressedTime <= jumpButtonGracePeriod)
+            {
+                ySpeed = jumpSpeed;
+                jumpButtonPressedTime = null;
+                lastGroundedTime = null;
+            }
+        }
+        else
+        {
+            characterController.stepOffset = 0;
         }
 
 
-        // to do -- Animations Controll
-            //PlayAnimations();        
+
+        Vector3 velocity = movementDirection * speed;
+        velocity.y = ySpeed;
+        characterController.Move(velocity * Time.deltaTime);        
+        if(movementDirection != Vector3.zero)
+        {
+            Quaternion toRotation = Quaternion.LookRotation(movementDirection, Vector3.up);
+            transform.rotation = Quaternion.RotateTowards(transform.rotation, toRotation, rotationSpeed * Time.deltaTime);
+        }
+               
     }         
 
     
